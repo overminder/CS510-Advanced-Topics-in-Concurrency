@@ -244,22 +244,35 @@ void* ti(void *data) {
 
 // spin_try_lock
 int spin_try_lock(volatile uint64_t *lock) {
-  // TODO
+  if (lockcmpxchgq(lock, UNLOCKED, LOCKED) == UNLOCKED) {
+    // *lock == UNLOCKED: success
+    return 0;
+  } else {
+    return 1;
+  }
 }
 
 // spin_lock
 void spin_lock(volatile uint64_t *lock) {
-  // TODO
+  while (spin_try_lock(lock) != 0);
 }
 
 // spin_wait_lock
 void spin_wait_lock(volatile uint64_t *lock) {
-  // TODO
+  while (spin_try_lock(lock) != 0) {
+    volatile int i = 500;
+    while (i > 0) {
+      --i;
+    }
+  }
 }
 
 // spin_read_lock
 void spin_read_lock(volatile uint64_t *lock) {
   // TODO
+  do {
+    while (*lock == LOCKED);
+  } while (spin_try_lock(lock) != 0);
 }
 
 // spin_experimental_lock
@@ -270,6 +283,7 @@ void spin_experimental_lock(volatile uint64_t *lock) {
 
 void spin_unlock(volatile uint64_t *lock) {
   // TODO
+  *lock = UNLOCKED;
 }
 
 // END ASSIGNMENT SECTION

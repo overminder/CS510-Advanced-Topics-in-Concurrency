@@ -34,18 +34,19 @@ char *test_names[] = { "spin_try_lock_correctness_nograph"
 
 // skip tests with 0s, each value corresponds to the test in the same position
 // in test_names above
-uint64_t test_on[] = { 1
+uint64_t test_on[] = { 0
                      , 0
                      , 0
+                     , 1
                      , 0
+                     , 1
                      , 0
-                     , 0
-                     , 0
-                     , 0
-                     , 0
-                     , 0
+                     , 1
+                     , 1
+                     , 1
                      , 0
                      };
+
 
 op **oss = NULL;
 uint64_t n_accesses = 3;
