@@ -67,4 +67,4 @@ endif
 
 .PHONY: clean
 clean: 
-	rm -f $(OBJS) $(wildcard *CPP.c) test
+	rm -f $(OBJS) $(wildcard *CPP.c) test tags data/.*.pdf
