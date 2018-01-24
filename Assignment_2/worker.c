@@ -449,20 +449,66 @@ void abql_nosharing_unlock(volatile uint64_t *my_place, volatile flag_nosharing 
 }
 
 void mcs_sharing_lock(volatile mcs_sharing *global_lock, volatile mcs_sharing *local_lock) {
+  _CMM_STORE_SHARED(local_lock->next, 0);
   // TODO
+  volatile mcs_sharing *owner = (void *) xchgq(&global_lock->next, (uintptr_t) local_lock);
+  if (owner) {
+    _CMM_STORE_SHARED(local_lock->locked, LOCKED);
+    _CMM_STORE_SHARED(owner->next, (uintptr_t) local_lock);
+    while (_CMM_LOAD_SHARED(local_lock->locked) == LOCKED);
+  } else {
+    // Acquired
+  }
 }
 
 void mcs_nosharing_lock(volatile mcs_nosharing *global_lock, volatile mcs_nosharing *local_lock) {
   // TODO
+  _CMM_STORE_SHARED(local_lock->next, 0);
+  // TODO
+  volatile mcs_nosharing *owner = (void *) xchgq(&global_lock->next, (uintptr_t) local_lock);
+  if (owner) {
+    _CMM_STORE_SHARED(local_lock->locked, LOCKED);
+    _CMM_STORE_SHARED(owner->next, (uintptr_t) local_lock);
+    while (_CMM_LOAD_SHARED(local_lock->locked) == LOCKED);
+  } else {
+    // Acquired
+  }
 }
 
 void mcs_sharing_unlock(volatile mcs_sharing *global_lock, volatile mcs_sharing *local_lock) {
-  // TODO
+  volatile mcs_sharing *next;
+  // Crucial to not do the lockcmpxchg first to avoid more invalidation.
+  if (next = _CMM_LOAD_SHARED(*(mcs_sharing **) &local_lock->next)) {
+  } else {
+    if (lockcmpxchgq(&global_lock->next, (uintptr_t) local_lock, 0) ==
+        (uintptr_t) local_lock) {
+      // Done.
+      return;
+    } else {
+      // Someone is waiting.
+      while (!(next = _CMM_LOAD_SHARED(*(mcs_sharing **) &local_lock->next)));
+    }
+  }
+  _CMM_STORE_SHARED(next->locked, UNLOCKED);
 }
 
 void mcs_nosharing_unlock(volatile mcs_nosharing *global_lock, volatile mcs_nosharing *local_lock) 
 {
   // TODO
+  volatile mcs_nosharing *next;
+  // Crucial to not do the lockcmpxchg first to avoid more invalidation.
+  if (next = _CMM_LOAD_SHARED(*(mcs_nosharing **) &local_lock->next)) {
+  } else {
+    if (lockcmpxchgq(&global_lock->next, (uintptr_t) local_lock, 0) ==
+        (uintptr_t) local_lock) {
+      // Done.
+      return;
+    } else {
+      // Someone is waiting.
+      while (!(next = _CMM_LOAD_SHARED(*(mcs_nosharing **) &local_lock->next)));
+    }
+  }
+  _CMM_STORE_SHARED(next->locked, UNLOCKED);
 }
 
 // END ASSIGNMENT SECTION

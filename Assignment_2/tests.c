@@ -64,7 +64,7 @@ char *test_names[] = { "spin_try_lock_correctness_nograph"
                      , "mcs_nosharing_lock"
                      };
 
-// #define A2_BENCH_ONLY
+#define A2_BENCH_ONLY
 #ifdef A2_BENCH_ONLY
 // skip tests with 0s, each value corresponds to the test in the same position
 // in test_names above
@@ -89,8 +89,8 @@ uint64_t test_on[] = { 0 // spin_try_lock_correctness_nograph
                      , 1 // ticket_lock
                      , 1 // abql_sharing_lock
                      , 1 // abql_nosharing_lock
-                     , 0 // mcs_sharing_lock
-                     , 0 // mcs_nosharing_lock
+                     , 1 // mcs_sharing_lock
+                     , 1 // mcs_nosharing_lock
                      };
 
 #else
@@ -102,7 +102,7 @@ uint64_t test_on[] = { 0 // spin_try_lock_correctness_nograph
                      , 0 // ticket_correctness_nograph
                      , 0 // abql_sharing_correctness_nograph
                      , 0 // abql_nosharing_correctness_nograph
-                     , 1 // mcs_sharing_correctness_nograph
+                     , 0 // mcs_sharing_correctness_nograph
                      , 1 // mcs_nosharing_correctness_nograph
 
                      , 0 // pthread_spin_lock
@@ -155,8 +155,18 @@ void tests_multi() {
   }
 
   // TODO declare and initialize data for mcs_sharing
+  mcss_sharing = malloc(sizeof(mcs_sharing) * n_threads);
+  for (i = 0; i < n_threads; ++i) {
+    mcss_sharing[i].next = 0;
+    mcss_sharing[i].locked = UNLOCKED;
+  }
 
   // TODO declare and initialize data for mcs_nosharing
+  mcss_nosharing = malloc(sizeof(mcs_nosharing) * n_threads);
+  for (i = 0; i < n_threads; ++i) {
+    mcss_nosharing[i].next = 0;
+    mcss_nosharing[i].locked = UNLOCKED;
+  }
 
   // header for csv
   printf_csv("ops,test,run,nt,critical_section_accesses,ticks\n","");

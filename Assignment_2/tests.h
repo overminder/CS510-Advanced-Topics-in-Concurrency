@@ -44,7 +44,7 @@ extern volatile uint64_t        queue_last_nosharing;
 extern volatile flag_nosharing *flags_nosharing;
 
 // define a type for mcs_sharing
-typedef struct {
+typedef struct mcs_sharing_s {
   uint64_t next;
   uint64_t locked;
 } mcs_sharing;
@@ -58,6 +58,7 @@ extern volatile mcs_sharing *mcss_sharing;
 typedef struct {
   uint64_t next;
   uint64_t locked;
+  uint64_t padding[6];
 } mcs_nosharing;
 
 // declare shared data for mcs_nosharing
