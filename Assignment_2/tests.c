@@ -64,6 +64,8 @@ char *test_names[] = { "spin_try_lock_correctness_nograph"
                      , "mcs_nosharing_lock"
                      };
 
+// #define A2_BENCH_ONLY
+#ifdef A2_BENCH_ONLY
 // skip tests with 0s, each value corresponds to the test in the same position
 // in test_names above
 uint64_t test_on[] = { 0 // spin_try_lock_correctness_nograph
@@ -71,11 +73,37 @@ uint64_t test_on[] = { 0 // spin_try_lock_correctness_nograph
                      , 0 // spin_wait_lock_correctness_nograph
                      , 0 // spin_read_lock_correctness_nograph
                      , 0 // spin_experimental_lock_correctness_nograph
-                     , 1 // ticket_correctness_nograph
+                     , 0 // ticket_correctness_nograph
                      , 0 // abql_sharing_correctness_nograph
                      , 0 // abql_nosharing_correctness_nograph
                      , 0 // mcs_sharing_correctness_nograph
                      , 0 // mcs_nosharing_correctness_nograph
+
+                     , 1 // pthread_spin_lock
+
+                     , 0 // spin_try_lock_nograph
+                     , 1 // spin_lock 
+                     , 1 // spin_wait_lock
+                     , 1 // spin_read_lock
+                     , 0 // spin_experimental_lock
+                     , 1 // ticket_lock
+                     , 1 // abql_sharing_lock
+                     , 1 // abql_nosharing_lock
+                     , 0 // mcs_sharing_lock
+                     , 0 // mcs_nosharing_lock
+                     };
+
+#else
+uint64_t test_on[] = { 0 // spin_try_lock_correctness_nograph
+                     , 0 // spin_lock_correctness_nograph
+                     , 0 // spin_wait_lock_correctness_nograph
+                     , 0 // spin_read_lock_correctness_nograph
+                     , 0 // spin_experimental_lock_correctness_nograph
+                     , 0 // ticket_correctness_nograph
+                     , 0 // abql_sharing_correctness_nograph
+                     , 0 // abql_nosharing_correctness_nograph
+                     , 1 // mcs_sharing_correctness_nograph
+                     , 1 // mcs_nosharing_correctness_nograph
 
                      , 0 // pthread_spin_lock
 
@@ -90,6 +118,7 @@ uint64_t test_on[] = { 0 // spin_try_lock_correctness_nograph
                      , 0 // mcs_sharing_lock
                      , 0 // mcs_nosharing_lock
                      };
+#endif /* A2_BENCH_ONLY */
 
 op **oss = NULL;
 uint64_t n_accesses = 3;
@@ -114,8 +143,16 @@ void tests_multi() {
   // GLOBAL DATA (dynamically determined initial values)
 
   // TODO declare and initialize data for abql_sharing
+  flags_sharing = malloc(sizeof(flag_sharing) * n_threads);
+  for (i = 0; i < n_threads; ++i) {
+    flags_sharing[i].val = i == 0 ? HAS_LOCK : MUST_WAIT;
+  }
 
   // TODO declare and initialize data for abql_nosharing
+  flags_nosharing = malloc(sizeof(flag_nosharing) * n_threads);
+  for (i = 0; i < n_threads; ++i) {
+    flags_nosharing[i].val = i == 0 ? HAS_LOCK : MUST_WAIT;
+  }
 
   // TODO declare and initialize data for mcs_sharing
 

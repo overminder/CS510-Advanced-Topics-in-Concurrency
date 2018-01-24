@@ -362,60 +362,90 @@ void* ti(void *data) {
 
 // spin_try_lock
 int spin_try_lock(volatile uint64_t *lock) {
-  // TODO
+  if (lockcmpxchgq(lock, UNLOCKED, LOCKED) == UNLOCKED) {
+    // *lock == UNLOCKED: success
+    return 0;
+  } else {
+    return 1;
+  }
 }
 
 // spin_lock
 void spin_lock(volatile uint64_t *lock) {
-  // TODO
+  while (spin_try_lock(lock) != 0);
 }
 
 // spin_wait_lock
 void spin_wait_lock(volatile uint64_t *lock) {
-  // TODO
+  while (spin_try_lock(lock) != 0) {
+    volatile int i = 500;
+    while (i > 0) {
+      --i;
+    }
+  }
 }
 
 // spin_read_lock
 void spin_read_lock(volatile uint64_t *lock) {
- // TODO
+  // TODO
+  do {
+    while (*lock == LOCKED);
+  } while (spin_try_lock(lock) != 0);
 }
 
 // spin_experimental_lock
 void spin_experimental_lock(volatile uint64_t *lock) {
- // TODO
+  // TODO
 }
     
 
 void spin_unlock(volatile uint64_t *lock) {
   // TODO
+  *lock = UNLOCKED;
 }
 
 // BEGIN ASSIGNMENT SECTION
 
 void ticket_lock(volatile ticket_state *lock) {
-  // TODO
+  uint64_t my_ticket = lockxaddq(&lock->next, 1);
+  while (_CMM_LOAD_SHARED(lock->owner) != my_ticket);
 }
 
 void ticket_unlock(volatile ticket_state *lock) {
-  // TODO
+  lockxaddq(&lock->owner, 1);
 }
 
 void abql_sharing_lock(volatile uint64_t *my_place, volatile uint64_t *queue_last, 
                        volatile flag_sharing *flags, uint64_t n_threads) {
   // TODO
+  uint64_t me = lockxaddq(queue_last, 1);
+  // my_place is only used locally so a fence would be useless.
+  *my_place = me;
+  while (_CMM_LOAD_SHARED(flags[me % n_threads].val) != HAS_LOCK);
 }
 
 void abql_nosharing_lock(volatile uint64_t *my_place, volatile uint64_t *queue_last, 
                          volatile flag_nosharing *flags, uint64_t n_threads) {
   // TODO
+  uint64_t me = lockxaddq(queue_last, 1);
+  // my_place is only used locally so a fence would be useless.
+  *my_place = me;
+  while (_CMM_LOAD_SHARED(flags[me % n_threads].val) != HAS_LOCK);
 }
 
 void abql_sharing_unlock(volatile uint64_t *my_place, volatile flag_sharing *flags, uint64_t n_threads) {
   // TODO
+  uint64_t me = *my_place;
+  _CMM_STORE_SHARED(flags[(me + 1) % n_threads].val, HAS_LOCK);
+  flags[me % n_threads].val = MUST_WAIT;
 }
 
 void abql_nosharing_unlock(volatile uint64_t *my_place, volatile flag_nosharing *flags, uint64_t n_threads) {
   // TODO
+  uint64_t me = *my_place;
+  _CMM_STORE_SHARED(flags[(me + 1) % n_threads].val, HAS_LOCK);
+  // _CMM_STORE_SHARED(flags[me % n_threads].val, MUST_WAIT);
+  flags[me % n_threads].val = MUST_WAIT;
 }
 
 void mcs_sharing_lock(volatile mcs_sharing *global_lock, volatile mcs_sharing *local_lock) {

@@ -2,3 +2,7 @@
 .*.swp
 tags
 *.tar.gz
+
+.DS_Store
+._*
+Assignment*/data

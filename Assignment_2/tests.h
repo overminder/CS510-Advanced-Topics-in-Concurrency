@@ -35,6 +35,7 @@ extern volatile flag_sharing *flags_sharing;
 // TODO define a type for abql_nosharing (alter the definition below)
 typedef struct {
   uint64_t val;
+  uint64_t padding[7];
 } flag_nosharing;
 
 // declare shared data for abql_nosharing
