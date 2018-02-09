@@ -97,7 +97,7 @@ uint64_t test_on[] = { 0 // spin_try_lock_correctness_nograph
                      , 0 // abql_nosharing_correctness_nograph
                      , 0 // mcs_sharing_correctness_nograph
                      , 0 // mcs_nosharing_correctness_nograph
-                     , 1 // coarse_queue_correctness_nograph
+                     , 0 // coarse_queue_correctness_nograph
                      , 0 // nb_queue_correctness_nograph
 
                      , 0 // pthread_spin_lock
@@ -112,10 +112,10 @@ uint64_t test_on[] = { 0 // spin_try_lock_correctness_nograph
                      , 0 // abql_nosharing_lock
                      , 0 // mcs_sharing_lock
                      , 0 // mcs_nosharing_lock
-                     , 0 // coarse_queue
-                     , 0 // coarse_queue_enq
-                     , 0 // nb_queue
-                     , 0 // nb_queue_enq
+                     , 1 // coarse_queue
+                     , 1 // coarse_queue_enq
+                     , 1 // nb_queue
+                     , 1 // nb_queue_enq
                      };
 
 uint64_t accesses_on[] = { 1 // spin_try_lock_correctness_nograph

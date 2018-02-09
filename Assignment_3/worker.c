@@ -2,6 +2,11 @@
 #include "util.h"
 #include "worker.h"
 
+#define TI_ALLOC(tn, ty, nptr) \
+  uint64_t tn; ty nptr; \
+  pool_allocate(d, &tn); \
+  nptr = (ty) get_qptr(tn)
+
 void announce(volatile uint64_t *p, uint64_t phase, int t_i)
 {
   _CMM_STORE_SHARED(*p, phase);
@@ -307,6 +312,10 @@ void* ti(void *data) {
                 // worker do it.
                 if(d->i == 0) {
                   // TODO allocate and initialize new dummy node for nb_queue
+                  TI_ALLOC(new_node, coarse_node *, new_node_ptr);
+                  new_node_ptr->next = 0;
+                  new_node_ptr->val = 1;
+                  my_nb_queue.head = my_nb_queue.tail = new_node;
                 }
                 break;
             }
@@ -586,22 +595,35 @@ void* ti(void *data) {
 
 // spin_try_lock
 int spin_try_lock(volatile uint64_t *lock) {
-  // TODO
+  if (lockcmpxchgq(lock, UNLOCKED, LOCKED) == UNLOCKED) {
+    // *lock == UNLOCKED: success
+    return 0;
+  } else {
+    return 1;
+  }
 }
 
 // spin_lock
 void spin_lock(volatile uint64_t *lock) {
-  // TODO
+  while (spin_try_lock(lock) != 0);
 }
 
 // spin_wait_lock
 void spin_wait_lock(volatile uint64_t *lock) {
-  // TODO
+  while (spin_try_lock(lock) != 0) {
+    volatile int i = 500;
+    while (i > 0) {
+      --i;
+    }
+  }
 }
 
 // spin_read_lock
 void spin_read_lock(volatile uint64_t *lock) {
   // TODO
+  do {
+    while (*lock == LOCKED);
+  } while (spin_try_lock(lock) != 0);
 }
 
 // spin_experimental_lock
@@ -612,71 +634,236 @@ void spin_experimental_lock(volatile uint64_t *lock) {
 
 void spin_unlock(volatile uint64_t *lock) {
   // TODO
+  *lock = UNLOCKED;
 }
 
+// BEGIN ASSIGNMENT SECTION
+
 void ticket_lock(volatile ticket_state *lock) {
-  // TODO
+  uint64_t my_ticket = lockxaddq(&lock->next, 1);
+  while (_CMM_LOAD_SHARED(lock->owner) != my_ticket);
 }
 
 void ticket_unlock(volatile ticket_state *lock) {
-  // TODO
+  lockxaddq(&lock->owner, 1);
 }
 
 void abql_sharing_lock(volatile uint64_t *my_place, volatile uint64_t *queue_last, 
                        volatile flag_sharing *flags, uint64_t n_threads) {
   // TODO
+  uint64_t me = lockxaddq(queue_last, 1);
+  // my_place is only used locally so a fence would be useless.
+  *my_place = me;
+  while (_CMM_LOAD_SHARED(flags[me % n_threads].val) != HAS_LOCK);
 }
 
 void abql_nosharing_lock(volatile uint64_t *my_place, volatile uint64_t *queue_last, 
                          volatile flag_nosharing *flags, uint64_t n_threads) {
   // TODO
+  uint64_t me = lockxaddq(queue_last, 1);
+  // my_place is only used locally so a fence would be useless.
+  *my_place = me;
+  while (_CMM_LOAD_SHARED(flags[me % n_threads].val) != HAS_LOCK);
 }
 
 void abql_sharing_unlock(volatile uint64_t *my_place, volatile flag_sharing *flags, uint64_t n_threads) {
   // TODO
+  uint64_t me = *my_place;
+  _CMM_STORE_SHARED(flags[(me + 1) % n_threads].val, HAS_LOCK);
+  flags[me % n_threads].val = MUST_WAIT;
 }
 
 void abql_nosharing_unlock(volatile uint64_t *my_place, volatile flag_nosharing *flags, uint64_t n_threads) {
   // TODO
+  uint64_t me = *my_place;
+  _CMM_STORE_SHARED(flags[(me + 1) % n_threads].val, HAS_LOCK);
+  // _CMM_STORE_SHARED(flags[me % n_threads].val, MUST_WAIT);
+  flags[me % n_threads].val = MUST_WAIT;
 }
 
 void mcs_sharing_lock(volatile mcs_sharing *global_lock, volatile mcs_sharing *local_lock) {
+  _CMM_STORE_SHARED(local_lock->next, 0);
   // TODO
+  volatile mcs_sharing *owner = (void *) xchgq(&global_lock->next, (uintptr_t) local_lock);
+  if (owner) {
+    _CMM_STORE_SHARED(local_lock->locked, LOCKED);
+    _CMM_STORE_SHARED(owner->next, (uintptr_t) local_lock);
+    while (_CMM_LOAD_SHARED(local_lock->locked) == LOCKED);
+  } else {
+    // Acquired
+  }
 }
 
 void mcs_nosharing_lock(volatile mcs_nosharing *global_lock, volatile mcs_nosharing *local_lock) {
   // TODO
+  _CMM_STORE_SHARED(local_lock->next, 0);
+  // TODO
+  volatile mcs_nosharing *owner = (void *) xchgq(&global_lock->next, (uintptr_t) local_lock);
+  if (owner) {
+    _CMM_STORE_SHARED(local_lock->locked, LOCKED);
+    _CMM_STORE_SHARED(owner->next, (uintptr_t) local_lock);
+    while (_CMM_LOAD_SHARED(local_lock->locked) == LOCKED);
+  } else {
+    // Acquired
+  }
 }
 
 void mcs_sharing_unlock(volatile mcs_sharing *global_lock, volatile mcs_sharing *local_lock) {
-  // TODO
+  volatile mcs_sharing *next;
+  // Crucial to not do the lockcmpxchg first to avoid more invalidation.
+  if (next = _CMM_LOAD_SHARED(*(mcs_sharing **) &local_lock->next)) {
+  } else {
+    if (lockcmpxchgq(&global_lock->next, (uintptr_t) local_lock, 0) ==
+        (uintptr_t) local_lock) {
+      // Done.
+      return;
+    } else {
+      // Someone is waiting.
+      while (!(next = _CMM_LOAD_SHARED(*(mcs_sharing **) &local_lock->next)));
+    }
+  }
+  _CMM_STORE_SHARED(next->locked, UNLOCKED);
 }
 
 void mcs_nosharing_unlock(volatile mcs_nosharing *global_lock, volatile mcs_nosharing *local_lock) 
 {
   // TODO
-}
-
-void mcs_nosharing_unlock_lockcmpxchgq(volatile mcs_nosharing *global_lock, volatile mcs_nosharing *local_lock) {
-  // TODO
+  volatile mcs_nosharing *next;
+  // Crucial to not do the lockcmpxchg first to avoid more invalidation.
+  if (next = _CMM_LOAD_SHARED(*(mcs_nosharing **) &local_lock->next)) {
+  } else {
+    if (lockcmpxchgq(&global_lock->next, (uintptr_t) local_lock, 0) ==
+        (uintptr_t) local_lock) {
+      // Done.
+      return;
+    } else {
+      // Someone is waiting.
+      while (!(next = _CMM_LOAD_SHARED(*(mcs_nosharing **) &local_lock->next)));
+    }
+  }
+  _CMM_STORE_SHARED(next->locked, UNLOCKED);
 }
 
 // BEGIN ASSIGNMENT SECTION
 
+#define WITH_QUEUE_LOCK(x) { \
+  spin_read_lock(&queue->lock); \
+  x \
+  spin_unlock(&queue->lock); \
+}
+
 void coarse_enqueue(ti_data_in *d, volatile coarse_queue *queue, uint64_t value) { 
-  // TODO
+  TI_ALLOC(tagged, coarse_node *, nptr);
+  _CMM_STORE_SHARED(nptr->val, value);
+  _CMM_STORE_SHARED(nptr->next, 0);
+
+  WITH_QUEUE_LOCK({
+      if (!_CMM_LOAD_SHARED(queue->head)) {
+        // empty -> 1
+        _CMM_STORE_SHARED(queue->head, tagged);
+      } else {
+        // N -> N+1
+        coarse_node *tptr = (coarse_node *) get_qptr(_CMM_LOAD_SHARED(queue->tail));
+        _CMM_STORE_SHARED(tptr->next, tagged);
+      }
+      _CMM_STORE_SHARED(queue->tail, tagged);
+  });
 }
 
 int coarse_dequeue(ti_data_in *d, volatile coarse_queue *queue, uint64_t *ret) { 
-  // TODO
+  int res;
+  coarse_node *hptr = NULL;
+  WITH_QUEUE_LOCK({
+      uintptr_t head = CMM_LOAD_SHARED(queue->head);
+      uintptr_t tail = CMM_LOAD_SHARED(queue->tail);
+
+      if (!head) {
+        // empty
+        res = 0;
+      } else {
+        // non-empty
+        res = 1;
+        hptr = (coarse_node *) get_qptr(head);
+        *ret = CMM_LOAD_SHARED(hptr->val);
+        uint64_t next = CMM_LOAD_SHARED(hptr->next);
+        if (head == tail) {
+          // 1 -> 0
+          CMM_STORE_SHARED(queue->head, 0);
+          CMM_STORE_SHARED(queue->tail, 0);
+        } else {
+          // N+1 -> N
+          CMM_STORE_SHARED(queue->head, next);
+        }
+      }
+  });
+  if (hptr) {
+    pool_free(d, hptr);
+  }
+  return res;
 }
 
+#define NB_CHASE() \
+    lockcmpxchgq(&queue->tail, tail, next)
+
 void nb_enqueue(ti_data_in *d, volatile nb_queue *queue, uint64_t value) {
-  // TODO
+  TI_ALLOC(n, nb_node *, nptr);
+  CMM_STORE_SHARED(nptr->val, value);
+  CMM_STORE_SHARED(nptr->next, 0);
+
+  uint64_t tail, next;
+
+  while (true) {
+    tail = CMM_LOAD_SHARED(queue->tail);
+    assert(tail != 0 && "tail is null?");
+    nb_node *tail_ptr = (nb_node *) get_qptr(tail);
+    next = CMM_LOAD_SHARED(tail_ptr->next);
+
+    // if (tail == CMM_LOAD_SHARED(queue->tail)) {
+      if (next == 0) {
+        if (lockcmpxchgq(&tail_ptr->next, next, n) == next) {
+          break;
+        }
+      } else {
+        // Some one enqueued before us: chase
+        NB_CHASE();
+      }
+    // }
+  }
+  // We just mutated tail->next: chase
+  lockcmpxchgq(&queue->tail, tail, n);
 }
 
 int nb_dequeue(ti_data_in *d, volatile nb_queue *queue, uint64_t *ret) {
-  // TODO
+  uint64_t head, tail, next;
+  nb_node *head_ptr;
+
+  while (true) {
+    head = CMM_LOAD_SHARED(queue->head);
+    tail = CMM_LOAD_SHARED(queue->tail);
+    assert(head != 0 && "head is null?");
+    assert(tail != 0 && "tail is null?");
+    head_ptr = (nb_node *) get_qptr(head);
+    next = CMM_LOAD_SHARED(head_ptr->next);
+    nb_node *next_ptr = (nb_node *) get_qptr(next);
+
+    // if (head == CMM_LOAD_SHARED(queue->head)) {
+      if (head == tail) {
+        if (!next) {
+          // Empty.
+          return 0;
+        }
+        // Falling behind.
+        NB_CHASE();
+      } else {
+        *ret = CMM_LOAD_SHARED(next_ptr->val);
+        if (lockcmpxchgq(&queue->head, head, next) == head) {
+          break;
+        }
+      }
+    // }
+  }
+  pool_free(d, head_ptr);
+  return 1;
 }
 
 // END ASSIGNMENT SECTION
